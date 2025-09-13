@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sticky Scrollama Chart</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="https://unpkg.com/scrollama"></script>
+<style>
+  :root { --stepH: 90vh; }
+
+  body { margin: 0; font-family: sans-serif; font-size: 24px; }
+
+  /* Full chart at top (optional) */
+  #fullChart { height: 200vh; margin: 24px 0 50px; }
+
+  /* Scrollytelling wrapper: contains BOTH sticky chart and steps */
+  #scrolly { position: relative; }
+
+  /* The sticky plot lives here and sticks for the entire #scrolly */
+  #zoomChart {
+    position: sticky;
+    top: 0;
+    height: 30vh;           /* full viewport so it can stick */
+    background: #fff;
+    z-index: 0;
+  }
+
+  /* The scrolling steps come after the sticky element but share the same parent */
+  #text {
+    position: relative;
+    z-index: 1;              /* render above the chart if they overlap */
+    margin-top: 0;
+  }
+
+  .textBox {
+    top: 20vh;             /* distance from top of viewport */
+    right: 10px;           /* distance from right edge */
+    width: 25%;            /* roughly 3rd quarter */
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    font-size: 18px;
+    z-index: 2;            /* above chart */
+    margin-left: auto;     /* push to right in flex container */
+  }
+
+
+  .section {
+    height: var(--stepH);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    border-bottom: none;
+    padding: 0 24px;
+    background: transparent;
+  }
+</style>
+</head>
+<body>
+
+<!-- <h2>Full Chart</h2> -->
+<!-- <div id="fullChart">
+  <iframe src="hierarchy_detailed.html" 
+          width="100%" 
+          height="1500px" 
+          style="border:none;"></iframe>
+</div> -->
+
+<!-- <h2>Interactive Chart</h2> -->
+
+<!-- IMPORTANT: one wrapper that contains BOTH sticky chart and steps -->
+<div id="scrolly">
+  <div id="zoomChart"></div>
+
+
+
+  <div id="text">
+    <div class="section"><div class="textBox">Happiness / Meaning (family, relationships, health)</div></div>
+    <div class="section"><div class="textBox">Meaning (work, academics, productivity)</div></div>
+    <div class="section"><div class="textBox">Meaningful impact (love, humanity)</div></div>
+    <div class="section"><div class="textBox">Psychological richness (travel, advanture, exploration)</div></div>
+    <div class="section"><div class="textBox">Financial Freedom</div></div>
+    <div class="section"><div class="textBox">Stress Free </div></div>
+    <div class="section"><div class="textBox">Work, relationships, financial security (without much psychological emphasis)</div></div>
+    <div class="section"><div class="textBox">Careers, often family-centered (without much psychological emphasis)</div></div>
+  </div>
+
+
+</div>
+
+<script>
+const fullChart = document.getElementById('fullChart');
+const zoomChart = document.getElementById('zoomChart');
+
+fetch('figure.json')
+  .then(r => r.json())
+  .then(fig => {
+    // 1) Full chart (static)
+    // Plotly.newPlot(fullChart, fig.data, fig.layout);
+
+    const leafLabels = fig.layout?.yaxis?.ticktext || [];
+
+// And tick positions (usually numeric positions along y)
+const tickVals = fig.layout?.yaxis?.tickvals || leafLabels.map((_, i) => i);
+
+
+    // 2) Sticky chart (will stick for the entire #scrolly height)
+    const baseLayout = {
+      ...fig.layout,
+      margin: { l: 300 },
+      height: 800,
+      autoexpand: false,
+      autosize: false,
+      // transition: { duration: 700, easing: 'cubic-in-out' }, // default UI easing
+      // yaxis: { ...(fig.layout?.yaxis||{}), autorange: false, fixedrange: true }, // no jitter
+      uirevision: 'stick', // preserve axis state between updates
+      // xaxis: { // Set the x-axis properties
+      //   // scaleanchor: 'y', // Set the scale anchor to y-axis
+      //   // scaleratio: 1, // Set the scale ratio to 1 for square pixels,
+      //   // automargin: false,
+      //   // autorange: false,
+      //       automargin: false,
+      //   showticklabels: true,
+      //   ticks:'outside',
+      // },
+      yaxis: { // Set the y-axis properties
+        // scaleanchor: 'x', // Set the scale anchor to x-axis
+        // scaleratio: 1, // Set the scale ratio to 1 for square pixels,
+        // autorange: false,
+        automargin: false,
+        showticklabels: true,
+        ticks:'outside',
+        tickvals: tickVals,
+        ticktext: leafLabels,
+        tickfont: { size: 12 },
+        // autorange: false,
+      },
+    };
+
+    Plotly.newPlot(zoomChart, fig.data, baseLayout);
+
+    function zoomTo(yRange) {
+      Plotly.animate(
+        zoomChart,
+        { layout: {
+          yaxis: {range: yRange} } },
+        {
+          transition: { duration: 700, easing: 'cubic-in-out' },
+        frame: { duration: 700 },
+        mode: 'next' // queue animations nicely when scrolling fast
+      }
+    );
+  }
+
+  function setSpotlight(y0, y1) {
+  Plotly.relayout(zoomChart, {
+    shapes: [{
+      type: 'rect',
+      xref: 'paper', x0: 0, x1: 1,   // full width
+      yref: 'y',    y0,  y1,
+      line: { width: 0 },
+      fillcolor: 'rgba(255,255,150,0.4)', // light yellow, semi-transparent
+      layer: 'above'
+    }]
+  });
+}
+
+// Animate the spotlight smoothly
+// function spotlightTo(range) {
+//   Plotly.animate(
+//     zoomChart,
+//     { layout: { shapes: [{ ...zoomChart.layout.shapes?.[0], y0: range[0], y1: range[1] }] } },
+//     { transition: { duration: 500, easing: 'cubic-in-out' }, frame: { duration: 500, redraw: false } }
+//   );
+// }
+
+
+
+
+
+    // Compute y-range across all traces (fallback if layout range not provided)
+    const layoutRange = fig?.layout?.yaxis?.range;
+    const allY = (fig.data || []).flatMap(tr => (tr.y || []).filter(v => Number.isFinite(v)));
+    const yMin = (layoutRange && layoutRange[0] != null) ? layoutRange[0] : Math.min(...allY);
+    const yMax = (layoutRange && layoutRange[1] != null) ? layoutRange[1] : Math.max(...allY);
+    const yThird = (yMax - yMin) / 3;
+
+    // Scrollama setup
+    const scroller = scrollama();
+
+function setY(range){
+  Plotly.relayout(zoomChart, {
+    'yaxis.range': range,
+    transition: {
+      duration: 500,          // half-second transition
+      easing: 'cubic-in-out'  // smooth acceleration/deceleration
+    }
+  });
+}
+
+// setSpotlight(...thirds[0]);
+
+// scroller
+//   .setup({ step: '.section', offset: 0.55 })
+//   .onStepEnter(({ index }) => spotlightTo(thirds[Math.min(index, thirds.length - 1)]));
+
+
+
+    scroller
+      .setup({
+        step: '.section',
+        offset: 0.55, // triggers near middle of viewport
+        debug: false
+      })
+      // .onStepEnter(({ index }) => {
+      //   if (index === 0) setY([yMax - yThird, yMax]);            // top third
+      //   if (index === 1) setY([yMin + yThird, yMax - yThird]);   // middle third
+      //   if (index === 2) setY([yMin, yMin + yThird]);            // bottom third
+      // });
+
+      .onStepEnter(({ index }) => {
+        let yRange, spotRange;
+        // if (index === 0) zoomTo([yMin, yMax]);
+        if (index === 0) {
+          yRange = [yMax - yThird + 100, yMax];
+          spotRange = [yMax - yThird + 190, yMax];
+          yRange = spotRange;
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+        if (index === 1) {
+          yRange = [yMax - yThird + 100, yMax];
+          spotRange = [yMax - yThird + 120, yMax - 80];
+          yRange = spotRange;
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+        if (index === 2) {
+          yRange = [yMin + yThird + 250, yMax - yThird + 150];
+          spotRange = [yMin + yThird + 350, yMax - yThird + 130];
+          yRange = spotRange;
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+        if (index === 3) {
+          yRange = [yMin + yThird + 250, yMax - yThird + 150];
+          spotRange = [yMin + yThird + 310, yMax - yThird + 70];
+          yRange = spotRange;
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+        
+        // Entire block is finance....
+        if (index === 4) {
+          yRange = [yMin + yThird + 60, yMax - yThird + 40];
+          spotRange = [yMin + yThird - 50, yMax - yThird + 50];
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+
+        // Financial security
+        if (index === 5) {
+          yRange = [yMin + yThird - 15, yMax - yThird - 210];
+          spotRange = [yMin + yThird + 250, yMax - yThird - 50];
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+
+        if (index === 6) {
+          yRange = [yMin + yThird - 150, yMax - yThird - 290];
+          spotRange = [yMin, yMin + yThird];
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+
+        if (index === 7) {
+          yRange = [yMin, yMin + 130];
+          spotRange = [yMin, yMin + yThird - 100];
+          zoomTo(yRange);
+          // setSpotlight(...spotRange);
+        }
+        // if (index === 1) zoomTo([yMin + yThird + 250, yMax - yThird + 150]);
+        // if (index === 2) zoomTo([yMin + yThird + 60, yMax - yThird + 40]);
+        // if (index === 3) zoomTo([yMin + 130, yMin + yThird + 80]);
+        // if (index === 4) zoomTo([yMin, yMin + 200]);
+      });
+
+    // Recalculate on resize
+    window.addEventListener('resize', scroller.resize);
+  })
+  .catch(err => console.error('Error loading figure.json:', err));
+</script>
+
+</body>
+</html>
